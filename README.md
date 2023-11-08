@@ -2,7 +2,7 @@
 
 #### This is an interactive fractal simulation and rendering engine for the visualization of Mandelbrot and Julia Sets
 
-[//]: # (#### [View Demo on YouTube]&#40;https://youtu.be/P6uKmlRDGvo&#41;)
+#### [View Demo on YouTube](https://youtu.be/HMKS5evDOoE)
 
 ###### See also
 [Times Table Simulation](https://github.com/ChauhanRohan-RC/Times-Table)  
