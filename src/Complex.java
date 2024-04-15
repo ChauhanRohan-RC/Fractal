@@ -54,7 +54,7 @@ public class Complex {
 
     @Override
     public String toString() {
-        return String.format("%f%+fi", re, img);
+        return String.format("%f %+fi", re, img);
     }
 
     @Override

@@ -34,8 +34,9 @@
 * Install [Java](https://www.oracle.com/in/java/technologies/downloads/) on your computer and add it to the path
 * Clone this repository  
   `git clone https://github.com/ChauhanRohan-RC/Fractal.git`
-* Navigate to `out\artifacts\Fractal_jar` and run `launch.bat`.  
-  Optionally, open up the terminal and run `java -jar Fractal.jar`
+* Navigate to [out/artifacts/Fractal_jar](out/artifacts/Fractal_jar). 
+* Open up the terminal and run `java -jar Fractal.jar`
+* Alternatively (on windows), run [launch.bat](out/artifacts/Fractal_jar/launch.bat)
 
 ## Algorithm Parameters
 * `Seed`: starting value for the fractal to build upon.
@@ -47,14 +48,19 @@
 
 ## Controls
 ### Fractal Controls
-* `F` : Change the Fractal. Available fractals are
+* `F` : Next Fractal. Available fractals are
   * `Mandelbrot Set`: default seed $z_0 = 0 + 0i$ 
   * `Julia Set`: default seed $c = 0 + 0i$
-* `S` : Change the seed control mode
+* `S` : Next seed animation mode
   * `Fixed`: seed does not change over time
   * `Animate Periodic`: seed oscillates periodically (like a sine wave) with time
   * `Mouse Control`: seed value is controlled by the current mouse position in real time.
+
+* `SPACE` : Play or Pause seed animation
 * `R` : Reset seed to default value
+* `Ctrl-R` : Reset Everything
+
+
 * `+/-` : Change maximum number of iterations
 * `Ctrl +/-` : Change the divergence distance
 * `Shift +/-` : Change the number of worker threads
@@ -72,19 +78,29 @@
   * `Hue`: Hue cycle mapping in HSB color space
 * `H` : Toggle HUD (Overlay text)
 * `Ctrl-S` : Save the current frame (capture screenshot)
-* `Ctrl-R` : Reset Everything
 
 ![Julia Set with seed -0.835 + 0.2321i](gallery/julia_set_mono_dark_seed_-0.835000-0.232100i.png)
 
 ## Commands
-* `seed <complex number>` : Set the current fractal seed. Example: seed -0.8 + 0.156i
-* `change fractal` : switch to next fractal [Mandelbrot Set | Julia Set]
-* `change color` : change color mapping [Light | Dark | Hue]
-* `change sc` : change seed control mode [Fixed | Periodic | Mouse]
+* `help <scope>` : Usgae information of the given scope `[Controls | commands | all]`
+
+
+* `fractal` : switch to next fractal `[Mandelbrot Set | Julia Set]`
+* `color` : next color mapping `[Light | Dark | Hue]`
+* `anim` : next seed animation mode `[Fixed | Periodic | Mouse]`
+* `play` or `pause` : play or pause seed animation
+
+
+* `seed <complex number>` : set the current fractal seed. example: `seed -0.8 + 0.156i`
+* `itr <max_iterations>` : set maximum iterations. example: `itr 73`
+* `divdist <divergence_distance>` : set divergence distance. example: `divdist 24.82`
+* `threads <count>` : set the number of worker threads. example: `threads 4`
+
+
+* `reset <scope>` : reset the given scope `[view | seed | all]`. Example: `reset seed`
 * `toggle hud` : toggle HUD
 * `save` : save current frame
-* `reset <scope>` : Reset the given scope [view | seed | all]. Example: reset seed
-* `exit` : Kill the engine
+* `exit` : kill the engine
 
 ![Julia Set with seed -0.4 + 0.6i](gallery/julia_set_hue_cycle_seed_-0.400000+0.600000i.png)
 

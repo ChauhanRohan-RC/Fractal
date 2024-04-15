@@ -17,8 +17,17 @@ import java.util.concurrent.Callable;
 public class Main extends PApplet {
 
     public enum Fractal {
-        MANDELBROT("Mandelbrot Set", "C", new Complex(0, 0)),
-        JULIA("Julia Set", "Z", new Complex(0, 0));
+
+        MANDELBROT("Mandelbrot Set",
+                "Z",
+                new Complex(0, 0)
+        ),
+
+        JULIA("Julia Set",
+                "C",
+                new Complex(0, 0)
+        );
+
 
         public final String displayName;
         public final String seedLabel;
@@ -33,14 +42,16 @@ public class Main extends PApplet {
     }
 
     public enum SeedAnimationMode {
-        OFF("OFF"),
-        PERIODIC("Periodic"),
-        BY_MOUSE("Mouse");
+        OFF("OFF", false),
+        PERIODIC("Periodic", true),
+        BY_MOUSE("Mouse", true);
 
         public final String displayName;
+        public final boolean supportsPause;
 
-        SeedAnimationMode(String displayName) {
+        SeedAnimationMode(String displayName, boolean supportsPause) {
             this.displayName = displayName;
+            this.supportsPause = supportsPause;
         }
     }
 
@@ -74,37 +85,43 @@ public class Main extends PApplet {
     public static final boolean DEFAULT_DRAW_HUD = true;
 
     // Number of worker threads
-    private static final int THREADS_MIN = 1;
-    private static final int THREADS_MAX = Async.NO_CPU_CORES * 2;
-    private static final int THREADS_DEFAULT = Async.NO_CPU_CORES;
+    private static final int THREAD_COUNT_MIN = 1;
+    private static final int THREAD_COUNT_MAX = Async.NO_CPU_CORES * 4;
+    private static final int THREAD_COUNT_DEFAULT = Async.NO_CPU_CORES;
+    private static final int THREAD_COUNT_STEP = 1;
 
     // Maximum number of iterations
     private static final int ITERATIONS_MIN = 10;
-    private static final int ITERATIONS_MAX = 1000;
+    private static final int ITERATIONS_MAX = 10000;
     private static final int ITERATIONS_DEFAULT = 100;
     private static final int ITERATIONS_STEP = 10;
 
     // Minimum Distance after which the computation is flagged as diverging
-    private static final int DIVERGENCE_DISTANCE_MIN = 2;
-    private static final int DIVERGENCE_DISTANCE_MAX = 100;
-    private static final int DIVERGENCE_DISTANCE_DEFAULT = 4;
-    private static final int DIVERGENCE_DISTANCE_STEP = 2;
+    private static final double DIVERGENCE_DISTANCE_MIN = 2;
+    private static final double DIVERGENCE_DISTANCE_MAX = 1000;
+    private static final double DIVERGENCE_DISTANCE_DEFAULT = 4;
+    private static final double DIVERGENCE_DISTANCE_STEP = 2;
 
     // Colors
-    public static final Color ACCENT = new Color(107, 196, 255, 255);
-    public static final Color ACCENT_HIGHLIGHT = new Color(255, 219, 77, 255);
+    public static final Color COLOR_ACCENT = new Color(137, 207, 252, 255);
+    public static final Color COLOR_ACCENT_HIGHLIGHT = new Color(255, 224, 99, 255);
 
     public static final boolean SHOW_TITLE = true;
     public static final float TITLE_SIZE = 0.026f;
-    public static final Color FG_TITLE = ACCENT_HIGHLIGHT;
+    public static final Color FG_TITLE = COLOR_ACCENT_HIGHLIGHT;
+
+    public static final boolean SHOW_PAUSED = true;
+    public static final float PAUSED_TEXT_SIZE = 0.026f;
+    public static final Color FG_PAUSED_TEXT = COLOR_ACCENT_HIGHLIGHT;
+
+    public static final Color BG_STATUS = new Color(30, 30, 30);
+    public static final Color FG_STATUS = COLOR_ACCENT;
 
     public static final boolean SHOW_MAIN_STATUS = true;
     public static final float STATUS_MAIN_TEXT_SIZE = 0.02f;
-    public static final Color FG_STATUS_MAIN = Color.WHITE;
 
     public static final boolean SHOW_SEC_STATUS = true;
     public static final float STATUS_SEC_TEXT_SIZE = 0.02f;
-    public static final Color FG_STATUS_SEC = Color.WHITE;
 
     public static <T extends Enum<T>> T cycleEnum(@NotNull Class<T> clazz, int curOrdinal) {
         final T[] values = clazz.getEnumConstants();
@@ -174,15 +191,16 @@ public class Main extends PApplet {
     @NotNull
     private Fractal fractal = DEFAULT_FRACTAL;
     @NotNull
-    private Complex seed = fractal.defaultSeed;
-    private int maxIterations = ITERATIONS_DEFAULT;
-    private int divergenceDistance = DIVERGENCE_DISTANCE_DEFAULT;
-    private int numThreads = THREADS_DEFAULT;     // number of worker threads
+    private Complex mSeed = fractal.defaultSeed;
+    private int mMaxIterations = ITERATIONS_DEFAULT;
+    private double mDivergenceDistance = DIVERGENCE_DISTANCE_DEFAULT;
+    private int mThreadCount = THREAD_COUNT_DEFAULT;     // number of worker threads
 
     @NotNull
     private Main.SeedAnimationMode animMode = DEFAULT_ANIMATION_MODE;
-    private float animAngle = 0f;
-    private float animAngleStep = 0.02f;
+    private double mAnimAngle = 0f;
+    private double mAnimAngleStep = Math.toRadians(1);
+    private boolean mAnimPaused;
 
     @NotNull
     private ColorScheme colorScheme = DEFAULT_COLOR_SCHEME;
@@ -286,12 +304,12 @@ public class Main extends PApplet {
 
     @Nullable
     public String getMainStatusText() {
-        return String.format("Iterations: %d  |  Divergence: %d  |  %s: %.3f %+.3fi  ", maxIterations, divergenceDistance, fractal.seedLabel, seed.re, seed.img);
+        return String.format("Max Iters: %d   |   Divg Dist: %.2f   |   Seed (%s): %.3f %+.3fi  ", mMaxIterations, mDivergenceDistance, fractal.seedLabel, mSeed.re, mSeed.img);
     }
 
     @Nullable
     public String getSecStatusText() {
-        return String.format("Threads: %d  |  Animation: %s  |  Colors: %s", numThreads, animMode.displayName, colorScheme.displayName);
+        return String.format("Threads: %d   |   Animation: %s   |   Colors: %s", mThreadCount, animMode.displayName, colorScheme.displayName);
     }
 
     @Override
@@ -300,13 +318,23 @@ public class Main extends PApplet {
 
         switch (animMode) {
             case PERIODIC -> {
-                seed = Complex.polar(0.7885, animAngle);
-                animAngle += animAngleStep;
-                drawFrame();
+                if (!mAnimPaused) {
+                    mSeed = Complex.polar(0.7885, mAnimAngle);
+                    mAnimAngle += mAnimAngleStep;
+                    drawFrame();
+                } else if (mFrameInvalidated < 2) {
+                    drawFrame();
+                    mFrameInvalidated++;
+                }
             }
             case BY_MOUSE -> {
-                seed = new Complex(map(mouseX, 0, width, xMin, xMax), map(mouseY, 0, height, yMax, yMin));
-                drawFrame();
+                if (!mAnimPaused) {
+                    mSeed = new Complex(map(mouseX, 0, width, xMin, xMax), map(mouseY, 0, height, yMax, yMin));
+                    drawFrame();
+                } else if (mFrameInvalidated < 2) {
+                    drawFrame();
+                    mFrameInvalidated++;
+                }
             }
             default -> {
                 if (mFrameInvalidated < 2) {
@@ -351,6 +379,7 @@ public class Main extends PApplet {
             case java.awt.event.KeyEvent.VK_F -> nextFractal();
             case java.awt.event.KeyEvent.VK_C -> nextColorScheme();
             case java.awt.event.KeyEvent.VK_H -> toggleHud();
+            case java.awt.event.KeyEvent.VK_SPACE -> toggleAnimationPaused();
 
             case java.awt.event.KeyEvent.VK_R -> {
                 if (event.isControlDown()) {
@@ -372,13 +401,13 @@ public class Main extends PApplet {
 
             case java.awt.event.KeyEvent.VK_DEAD_CEDILLA, java.awt.event.KeyEvent.VK_PLUS -> {
                 if (event.isShiftDown()) {
-                    changeNumberOfThreads(true);
+                    changeThreadCount(true, true);
                 }
             }
 
             case java.awt.event.KeyEvent.VK_DEAD_OGONEK, java.awt.event.KeyEvent.VK_MINUS -> {
                 if (event.isShiftDown()) {
-                    changeNumberOfThreads(false);
+                    changeThreadCount(false, true);
                 }
             }
         }
@@ -408,17 +437,17 @@ public class Main extends PApplet {
 
             case java.awt.event.KeyEvent.VK_DEAD_CEDILLA, java.awt.event.KeyEvent.VK_PLUS -> {
                 if (event.isControlDown()) {
-                    changeDivergenceDistance(true);
+                    changeDivergenceDistance(true, true);
                 } else if (!(event.isShiftDown() || event.isAltDown())) {
-                    changeMaxIterations(true);
+                    changeMaxIterations(true, true);
                 }
             }
 
             case java.awt.event.KeyEvent.VK_DEAD_OGONEK, java.awt.event.KeyEvent.VK_MINUS -> {
                 if (event.isControlDown()) {
-                    changeDivergenceDistance(false);
+                    changeDivergenceDistance(false, true);
                 } else if (!(event.isShiftDown() || event.isAltDown())) {
-                    changeMaxIterations(false);
+                    changeMaxIterations(false, true);
                 }
             }
         }
@@ -475,15 +504,18 @@ public class Main extends PApplet {
             yMin = cy2;
             yMax = cy1;
 
+            ensureYAspectRatio();
+
             invalidateFrame();
         }
 
         mousePivot1 = mousePivot2 = null;
-
     }
 
     private void onAnimationModeChanged(@Nullable Main.SeedAnimationMode prev, @NotNull Main.SeedAnimationMode cur) {
-        println("Animation Mode: " + cur.displayName);
+        println(R.SHELL_ROOT + "Animation Mode: " + cur.displayName);
+
+        mAnimPaused = false;    // reset
         invalidateFrame();
     }
 
@@ -500,6 +532,23 @@ public class Main extends PApplet {
         setSeedAnimationMode(cycleEnum(SeedAnimationMode.class, animMode));
     }
 
+
+    protected void onAnimationPauseChanged(boolean paused) {
+        println(R.SHELL_ROOT + "Animation " + (paused? "Paused" : "Resumed"));
+        invalidateFrame();
+    }
+
+    private void setAnimationPaused(boolean paused) {
+        if (animMode.supportsPause && mAnimPaused != paused) {
+            mAnimPaused = paused;
+            onAnimationPauseChanged(paused);
+        }
+    }
+
+    private void toggleAnimationPaused() {
+        setAnimationPaused(!mAnimPaused);
+    }
+
     private void nextFractal() {
         final Fractal prev = fractal;
         fractal = cycleEnum(Fractal.class, fractal);
@@ -510,7 +559,7 @@ public class Main extends PApplet {
     }
 
     private void onFractalChanged(@Nullable Fractal prev, @NotNull Fractal cur) {
-        println("Fractal: " + cur.displayName);
+        println(R.SHELL_ROOT + "Fractal: " + cur.displayName);
 //        resetSeed(false);
         invalidateFrame();
     }
@@ -525,72 +574,128 @@ public class Main extends PApplet {
     }
 
     private void onColorSchemeChanged(@Nullable ColorScheme prev, @NotNull ColorScheme cur) {
-        println("Color Scheme: " + cur.displayName);
+        println(R.SHELL_ROOT + "Color Scheme: " + cur.displayName);
         invalidateFrame();
     }
 
 
-    private void changeNumberOfThreads(boolean inc, boolean update) {
-        final int prev = numThreads;
-        numThreads = constrain(numThreads + (inc ? 1 : -1), THREADS_MIN, THREADS_MAX);
 
-        if (prev != numThreads) {
-            println("Threads: " + numThreads);
-            if (update) {
-                invalidateFrame();
-            }
+    protected void onThreadCountChanged(int prevThreadCount, int threadCount, boolean update) {
+        println(R.SHELL_THREADS + "Thread Count: %d -> %d".formatted(prevThreadCount, threadCount));
+
+        if (update) {
+            invalidateFrame();
         }
     }
 
-    private void changeNumberOfThreads(boolean inc) {
-        changeNumberOfThreads(inc, true);
+    private void setThreadCount(int threadCount, boolean update) throws IllegalArgumentException {
+        if (threadCount < THREAD_COUNT_MIN || threadCount > THREAD_COUNT_MAX)
+            throw new IllegalArgumentException(String.format("Thread count must be in range [%d, %d], given: %d", THREAD_COUNT_MIN, THREAD_COUNT_MAX, threadCount));
+
+        final int prev = mThreadCount;
+        if (threadCount != prev) {
+            mThreadCount = threadCount;
+
+            onThreadCountChanged(prev, threadCount, update);
+        }
+    }
+
+
+    private void changeThreadCount(boolean inc, boolean update) {
+        final int cur = mThreadCount;
+        final int _new = cur + ((inc ? 1 : -1) * THREAD_COUNT_STEP);
+
+        if (_new < THREAD_COUNT_MIN || _new > THREAD_COUNT_MAX)
+            return;
+        setThreadCount(_new, update);
+    }
+
+
+    protected void onMaxIterationsChanged(int prevMaxIters, int maxIters, boolean update) {
+        println(R.SHELL_MAX_ITERATIONS + "Max Iterations: %d -> %d".formatted(prevMaxIters, maxIters));
+
+        if (update) {
+            invalidateFrame();
+        }
+    }
+
+
+    private void setMaxIterations(int maxIterations, boolean update) throws IllegalArgumentException {
+        if (maxIterations < ITERATIONS_MIN || maxIterations > ITERATIONS_MAX)
+            throw new IllegalArgumentException(String.format("Maximum Iterations must be in range [%d, %d], given: %d", ITERATIONS_MIN, ITERATIONS_MAX, maxIterations));
+
+        final int prev = mMaxIterations;
+        if (maxIterations != prev) {
+            mMaxIterations = maxIterations;
+
+            onMaxIterationsChanged(prev, maxIterations, update);
+        }
     }
 
     private void changeMaxIterations(boolean inc, boolean update) {
-        final int prev = maxIterations;
-        maxIterations = constrain(maxIterations + ((inc ? 1 : -1) * ITERATIONS_STEP), ITERATIONS_MIN, ITERATIONS_MAX);
+        final int cur = mMaxIterations;
+        final int _new = cur + ((inc ? 1 : -1) * ITERATIONS_STEP);
 
-        if (prev != maxIterations) {
-            println("Maximum Iterations: " + maxIterations);
+        if (_new < ITERATIONS_MIN || _new > ITERATIONS_MAX)
+            return;
 
-            if (update) {
-                invalidateFrame();
-            }
+        setMaxIterations(_new, update);
+    }
+
+
+
+    protected void onDivergenceDistanceChanged(double prevDivergenceDistance, double divergenceDistance, boolean update) {
+        println(R.SHELL_DIVERGENCE_DISTANCE + "Divergence Distance: %f -> %f".formatted(prevDivergenceDistance, divergenceDistance));
+
+        if (update) {
+            invalidateFrame();
         }
     }
 
-    private void changeMaxIterations(boolean inc) {
-        changeMaxIterations(inc, true);
+    private void setDivergenceDistance(double divergenceDistance, boolean update) {
+        if (divergenceDistance < DIVERGENCE_DISTANCE_MIN || divergenceDistance > DIVERGENCE_DISTANCE_MAX)
+            throw new IllegalArgumentException("Divergence Distance must be in range [%f, %f], given: %f".formatted(DIVERGENCE_DISTANCE_MIN, DIVERGENCE_DISTANCE_MAX, divergenceDistance));
+
+        final double prev = mDivergenceDistance;
+        if (prev != divergenceDistance) {
+            mDivergenceDistance = divergenceDistance;
+
+            onDivergenceDistanceChanged(prev, divergenceDistance, update);
+        }
     }
+
 
     private void changeDivergenceDistance(boolean inc, boolean update) {
-        final int prev = divergenceDistance;
-        divergenceDistance = constrain(divergenceDistance + ((inc ? 1 : -1) * DIVERGENCE_DISTANCE_STEP), DIVERGENCE_DISTANCE_MIN, DIVERGENCE_DISTANCE_MAX);
+        final double cur = mDivergenceDistance;
+        final double _new = cur + ((inc ? 1 : -1) * DIVERGENCE_DISTANCE_STEP);
 
-        if (prev != divergenceDistance) {
-            println("Divergence Distance: " + divergenceDistance);
+        if (_new < DIVERGENCE_DISTANCE_MIN || _new > DIVERGENCE_DISTANCE_MAX)
+            return;
 
-            if (update) {
-                invalidateFrame();
-            }
+        setDivergenceDistance(_new, update);
+    }
+
+
+
+    protected void onSeedChanged(@NotNull Complex prevSeed, @NotNull Complex seed, boolean update) {
+        println(R.SHELL_SEED + "Seed: %s -> %s".formatted(prevSeed.toString(), seed.toString()));
+
+        if (update) {
+            invalidateFrame();
         }
     }
 
-    private void changeDivergenceDistance(boolean inc) {
-        changeDivergenceDistance(inc, true);
-    }
-
-    public void setSeed(@NotNull Complex seed, boolean stopAnimation) {
-        if (this.seed.equals(seed))
+    public void setSeed(@NotNull Complex seed, boolean stopAnimation, boolean update) {
+        if (mSeed.equals(seed))
             return;
 
         if (stopAnimation) {
             setSeedAnimationMode(SeedAnimationMode.OFF);
         }
 
-        this.seed = seed;
-        println("Seed: " + seed);
-        invalidateFrame();
+        final Complex prev = mSeed;
+        mSeed = seed;
+        onSeedChanged(prev, seed, update);
     }
 
     public void setDrawHud(boolean drawHud) {
@@ -607,11 +712,11 @@ public class Main extends PApplet {
 
     private void onDrawHudChanged(boolean drawHud) {
         invalidateFrame();
-        println("HUD " + (drawHud? "ON": "OFF"));
+        println(R.SHELL_ROOT + "HUD " + (drawHud? "ON": "OFF"));
     }
 
     private void snapshot() {
-        String file_name = fractal.displayName + "_" + colorScheme.displayName + "_seed_" + seed + ".png";
+        String file_name = fractal.displayName + "_" + colorScheme.displayName + "_seed_" + mSeed + ".png";
         file_name = Format.replaceAllWhiteSpaces(file_name.toLowerCase(), "_");
 
         saveFrame(file_name);
@@ -640,7 +745,7 @@ public class Main extends PApplet {
     }
 
     public void resetSeed(boolean update) {
-        seed = fractal.defaultSeed;
+        mSeed = fractal.defaultSeed;
         if (update || animMode == SeedAnimationMode.OFF) {
             invalidateFrame();
         }
@@ -649,10 +754,9 @@ public class Main extends PApplet {
     public void resetAll() {
         resetView(false);
         resetSeed(false);
-
-        numThreads = THREADS_DEFAULT;
-        divergenceDistance = DIVERGENCE_DISTANCE_DEFAULT;
-        maxIterations = ITERATIONS_DEFAULT;
+        setThreadCount(THREAD_COUNT_DEFAULT, false);
+        setMaxIterations(ITERATIONS_DEFAULT, false);
+        setDivergenceDistance(DIVERGENCE_DISTANCE_DEFAULT, false);
 
         invalidateFrame();
     }
@@ -674,20 +778,20 @@ public class Main extends PApplet {
         final int itr = switch (fractal) {
 
             // .................  Mandelbrot Set (Parameter space: each pixel is mapped to C, Z0 = constant)  ..........................
-            case MANDELBROT -> iterateMandelbrot(seed, pixelValue, maxIterations, divergenceDistance);
+            case MANDELBROT -> iterateMandelbrot(mSeed, pixelValue, mMaxIterations, mDivergenceDistance);
 
             // .................  Julia Set (Input space: each pixel is mapped to Z0, C = constant)  ..........................
-            case JULIA -> iterateMandelbrot(pixelValue, seed, maxIterations, divergenceDistance);
+            case JULIA -> iterateMandelbrot(pixelValue, mSeed, mMaxIterations, mDivergenceDistance);
         };
 
-        return toColor(itr, maxIterations);
+        return toColor(itr, mMaxIterations);
     }
 
     private void drawFrame() {
         loadPixels();
 
-        if (numThreads > 1) {
-            List<Callable<Void>> tasks = createUpdateTasks(numThreads);
+        if (mThreadCount > 1) {
+            List<Callable<Void>> tasks = createUpdateTasks(mThreadCount);
 
             try {
                 Async.THREAD_POOL_EXECUTOR.invokeAll(tasks);
@@ -714,17 +818,23 @@ public class Main extends PApplet {
         final float v_offset = height / 96f;
 
         // Status bar
-        final float statusMainTextSize = getTextSize(STATUS_MAIN_TEXT_SIZE);
-        final float statusSecTextSize = getTextSize(STATUS_SEC_TEXT_SIZE);
-
         if (SHOW_MAIN_STATUS) {
             final String mainStatusText = getMainStatusText();
             if (mainStatusText != null && !mainStatusText.isEmpty()) {
                 pushStyle();
-                fill(FG_STATUS_MAIN.getRGB());
-                textFont(pdSans, statusMainTextSize);
+                textFont(pdSans, getTextSize(STATUS_MAIN_TEXT_SIZE));
+
+                float w = textWidth(mainStatusText) + (h_offset * 2);
+                float h = (textAscent() + textDescent()) + (v_offset * 2);
+
+                noStroke();
+                fill(BG_STATUS.getRGB());
+                rectMode(CORNER);
+                rect(h_offset, height - h - v_offset, w, h, 10);
+
+                fill(FG_STATUS.getRGB());
                 textAlign(LEFT, BOTTOM);
-                text(mainStatusText, h_offset, height - v_offset);
+                text(mainStatusText, h_offset * 2, height - (v_offset * 2));
                 popStyle();
             }
         }
@@ -733,10 +843,19 @@ public class Main extends PApplet {
             final String secStatusText = getSecStatusText();
             if (secStatusText != null && !secStatusText.isEmpty()) {
                 pushStyle();
-                fill(FG_STATUS_SEC.getRGB());
-                textFont(pdSans, statusSecTextSize);
+                textFont(pdSans, getTextSize(STATUS_MAIN_TEXT_SIZE));
+
+                float w = textWidth(secStatusText) + (h_offset * 2);
+                float h = (textAscent() + textDescent()) + (v_offset * 2);
+
+                noStroke();
+                fill(BG_STATUS.getRGB());
+                rectMode(CORNER);
+                rect(width - w - h_offset, height - h - v_offset, w, h, 10);
+
+                fill(FG_STATUS.getRGB());
                 textAlign(RIGHT, BOTTOM);
-                text(secStatusText, width - h_offset, height - v_offset);
+                text(secStatusText, width - (h_offset * 2), height - (v_offset * 2));
                 popStyle();
             }
         }
@@ -744,10 +863,42 @@ public class Main extends PApplet {
         // Title
         if (SHOW_TITLE) {
             pushStyle();
-            fill(FG_TITLE.getRGB());
             textFont(pdSans, getTextSize(TITLE_SIZE));
+
+            final String text = fractal.displayName;
+
+            float w = textWidth(text) + (h_offset * 2);
+            float h = (textAscent() + textDescent()) + (v_offset * 2);
+
+            noStroke();
+            fill(BG_STATUS.getRGB());
+            rectMode(CORNER);
+            rect(h_offset, v_offset, w, h, 10);
+
+            fill(FG_TITLE.getRGB());
             textAlign(LEFT, TOP);
-            text(fractal.displayName, h_offset, v_offset);
+            text(text, h_offset * 2, v_offset * 2);
+            popStyle();
+        }
+
+        // Paused
+        if (SHOW_PAUSED && animMode.supportsPause && mAnimPaused) {
+            pushStyle();
+            textFont(pdSans, getTextSize(PAUSED_TEXT_SIZE));
+
+            final String text = "Paused";
+
+            float w = textWidth(text) + (h_offset * 2);
+            float h = (textAscent() + textDescent()) + (v_offset * 2);
+
+            noStroke();
+            fill(BG_STATUS.getRGB());
+            rectMode(CORNER);
+            rect(width - w - h_offset, v_offset, w, h, 10);
+
+            fill(FG_PAUSED_TEXT.getRGB());
+            textAlign(RIGHT, TOP);
+            text(text, width - (h_offset * 2), v_offset * 2);
             popStyle();
         }
     }
@@ -794,7 +945,7 @@ public class Main extends PApplet {
         final Main app = new Main();
         PApplet.runSketch(PApplet.concat(new String[]{app.getClass().getName()}, args), app);
 
-        println(R.DES_FULL);
+        println(R.DES_GENERAL_WITH_HELP);
         boolean running = true;
         Scanner sc;
 
@@ -808,19 +959,39 @@ public class Main extends PApplet {
 
             if (cmd.equals("exit") || cmd.equals("quit")) {
                 running = false;
+            } else if (cmd.startsWith("help")) {
+                final Runnable usage_pr =  () -> println(R.SHELL_HELP + "Prints usage information: Usage: help [commands | controls | all]");
+
+                final String left = cmd.substring(4).trim();
+                if (left.equals("controls")) {
+                    println(R.DES_CONTROLS);
+                } else if (left.equals("commands")) {
+                    println(R.DES_COMMANDS);
+                } else if (left.equals("all") || left.isEmpty()) {
+                    usage_pr.run();
+                    println("\n" + R.DES_FULL);
+                } else {
+                    usage_pr.run();
+                }
+            } else if (cmd.equals("play") || cmd.equals("pause")) {
+                if (app.animMode.supportsPause) {
+                    app.setAnimationPaused(cmd.equals("pause"));
+                } else {
+                    System.out.println(R.SHELL_ROOT + "Current animation mode (%s) does not support Play/Pause".formatted(app.animMode.displayName));
+                }
             } else if (cmd.equals("hud") || cmd.equals("toggle hud")) {
                 app.toggleHud();
             } else if (cmd.equals("color") || cmd.equals("change color") || cmd.equals("color scheme")) {
                 app.nextColorScheme();
-            } else if (cmd.equals("anim") || cmd.equals("animation") || cmd.equals("change anim") || cmd.equals("change sc")) {
+            } else if (cmd.equals("anim") || cmd.equals("animation") || cmd.equals("change anim") || cmd.equals("sa") ||  cmd.equals("change sa")) {
                 app.nextSeedAnimationMode();
             } else if (cmd.equals("fractal") || cmd.equals("change fractal")) {
                 app.nextFractal();
             } else if (cmd.equals("save") || cmd.equals("screenshot") || cmd.equals("snapshot")) {
                 app.snapshot();
-            }  else if (cmd.startsWith("seed")) {
+            } else if (cmd.startsWith("seed")) {
                 final String left = cmd.substring(4).trim();
-                final Runnable usage_pr = () -> println(R.SHELL_SEED + "Usage: seed <complex number>\nExample: seed -0.8 + 0.156i");
+                final Runnable usage_pr = () -> println(R.SHELL_SEED + "Current Value: %s | Default: %s\nUsage: seed <complex number>\nExample: seed -0.8 + 0.156i".formatted(app.mSeed, app.fractal.defaultSeed));
 
                 if (left.isEmpty()) {
                     usage_pr.run();
@@ -829,9 +1000,82 @@ public class Main extends PApplet {
 
                 try {
                     Complex seed = Complex.parse(left);
-                    app.setSeed(seed, true);
-                } catch (Exception exc) {
-                    System.err.println(R.SHELL_SEED + " Failed to parse complex number\n" + exc);
+                    app.setSeed(seed, true, true);
+                } catch (NumberFormatException exc) {
+                    System.err.println(R.SHELL_SEED + "Failed to parse complex number\n" + exc);
+                    usage_pr.run();
+                } catch (Throwable t) {
+                    System.err.println(R.SHELL_SEED + "Unknown Error\n");
+                    t.printStackTrace(System.err);
+                    usage_pr.run();
+                }
+            } else if (cmd.startsWith("itr")) {
+                final String left = cmd.substring(3).trim();
+                final Runnable usage_pr = () -> println(R.SHELL_MAX_ITERATIONS + String.format("Set Maximum Iterations. Current: %d  |  Default: %d\nUsage: itr <max_iterations>. Should be an integer in range [%d, %d]\nExample: itr 72", app.mMaxIterations, ITERATIONS_DEFAULT, ITERATIONS_MIN, ITERATIONS_MAX));
+
+                if (left.isEmpty()) {
+                    usage_pr.run();
+                    continue;
+                }
+
+                try {
+                    final int itr = Integer.parseInt(left);
+                    app.setMaxIterations(itr, true);
+                }  catch (NumberFormatException nfe) {
+                    System.err.println(R.SHELL_MAX_ITERATIONS + "Maximum iterations must be an INTEGER, given: " + left);
+                    usage_pr.run();
+                } catch (IllegalArgumentException iae) {
+                    System.err.println(R.SHELL_MAX_ITERATIONS + iae.getMessage());
+                    usage_pr.run();
+                } catch (Throwable t) {
+                    System.err.println(R.SHELL_MAX_ITERATIONS + "Failed to set Max Iterations");
+                    t.printStackTrace(System.err);
+                    usage_pr.run();
+                }
+            } else if (cmd.startsWith("divdist")) {
+                final String left = cmd.substring(7).trim();
+                final Runnable usage_pr = () -> println(R.SHELL_DIVERGENCE_DISTANCE + String.format("Set Divergence Distance. Current: %f  |  Default: %f\nUsage: divdist <divergence_distance>. Should be a float in range [%f, %f]\nExample: divdist 21.87", app.mDivergenceDistance, DIVERGENCE_DISTANCE_DEFAULT, DIVERGENCE_DISTANCE_MIN, DIVERGENCE_DISTANCE_MAX));
+
+                if (left.isEmpty()) {
+                    usage_pr.run();
+                    continue;
+                }
+
+                try {
+                    final double divdist = Double.parseDouble(left);
+                    app.setDivergenceDistance(divdist, true);
+                }  catch (NumberFormatException nfe) {
+                    System.err.println(R.SHELL_DIVERGENCE_DISTANCE + "Divergence Distance must be an integer or a floating point number, given: " + left);
+                    usage_pr.run();
+                } catch (IllegalArgumentException iae) {
+                    System.err.println(R.SHELL_DIVERGENCE_DISTANCE + iae.getMessage());
+                    usage_pr.run();
+                } catch (Throwable t) {
+                    System.err.println(R.SHELL_DIVERGENCE_DISTANCE + "Failed to set Divergence Distance");
+                    t.printStackTrace(System.err);
+                    usage_pr.run();
+                }
+            } else if (cmd.startsWith("threads")) {
+                final String left = cmd.substring(7).trim();
+                final Runnable usage_pr = () -> println(R.SHELL_THREADS + String.format("Set the number of Threads. Current: %d  |  Default: %d\nUsage: threads <count>. Should be an integer in range [%d, %d]\nExample: threads 2", app.mThreadCount, THREAD_COUNT_DEFAULT, THREAD_COUNT_MIN, THREAD_COUNT_MAX));
+
+                if (left.isEmpty()) {
+                    usage_pr.run();
+                    continue;
+                }
+
+                try {
+                    final int threads = Integer.parseInt(left);
+                    app.setThreadCount(threads, true);
+                }  catch (NumberFormatException nfe) {
+                    System.err.println(R.SHELL_THREADS + "Thread count must be an INTEGER, given: " + left);
+                    usage_pr.run();
+                } catch (IllegalArgumentException iae) {
+                    System.err.println(R.SHELL_THREADS + iae.getMessage());
+                    usage_pr.run();
+                } catch (Throwable t) {
+                    System.err.println(R.SHELL_THREADS + "Failed to set thread count");
+                    t.printStackTrace(System.err);
                     usage_pr.run();
                 }
             } else if (cmd.startsWith("reset")) {
