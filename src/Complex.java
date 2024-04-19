@@ -6,7 +6,12 @@ public class Complex {
     /**
      * The square root of -1. A number representing "0.0 + 1.0i"
      */
-    public static final Complex I = new Complex(0.0, 1.0);
+    public static final Complex PLUS_I = new Complex(0.0, 1.0);
+
+    /**
+     * The negative square root of -1. A number representing "0.0 - 1.0i"
+     */
+    public static final Complex MINUS_I = new Complex(0.0, -1.0);
 
     /**
      * A complex number representing "NaN + NaNi"
@@ -21,7 +26,12 @@ public class Complex {
     /**
      * A complex number representing "1.0 + 0.0i"
      */
-    public static final Complex ONE = new Complex(1.0, 0.0);
+    public static final Complex PLUS_ONE = new Complex(1.0, 0.0);
+
+    /**
+     * A complex number representing "-1.0 + 0.0i"
+     */
+    public static final Complex MINUS_ONE = new Complex(-1.0, 0.0);
 
     /**
      * A complex number representing "0.0 + 0.0i"
@@ -79,15 +89,18 @@ public class Complex {
 
     @NotNull
     public static Complex parse(@Nullable String s) throws NumberFormatException {
-        if (s == null)
+        if (s == null || s.isEmpty())
             return Complex.ZERO;
 
         s = Format.removeAllWhiteSpaces(s.trim());
         if (s.isEmpty())
             return Complex.ZERO;
 
-        if (s.equals("i"))
-            return Complex.I;
+        if (s.equals("i") || s.equals("+i"))
+            return Complex.PLUS_I;
+
+        if (s.equals("-i"))
+            return Complex.MINUS_I;
 
         String[] temp;
         double res_real, res_img;
@@ -119,13 +132,17 @@ public class Complex {
             }
         }
 
+
+        final String[] img_tmp;
         if (temp[0].contains("i")) {
             real_str = temp[1];
-            img_str = temp[0].split("i")[0];
+            img_tmp = temp[0].split("i");
         } else {
             real_str = temp[0];
-            img_str = temp[1].split("i")[0];
+            img_tmp = temp[1].split("i");
         }
+
+        img_str = img_tmp.length > 0? img_tmp[0]: "";
 
         res_real = Format.isEmpty(real_str)? 0: Double.parseDouble(real_str);
         res_img = Format.isEmpty(img_str)? 0: Double.parseDouble(img_str);

@@ -2,19 +2,24 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import processing.core.PApplet;
 
+import java.util.Arrays;
+
 public class Test extends PApplet {
 
     @NotNull
     public static Complex parseComplex(@Nullable String s) throws NumberFormatException {
-        if (s == null)
+        if (s == null || s.isEmpty())
             return Complex.ZERO;
 
         s = Format.removeAllWhiteSpaces(s.trim());
         if (s.isEmpty())
             return Complex.ZERO;
 
-        if (s.equals("i"))
-            return Complex.I;
+        if (s.equals("i") || s.equals("+i"))
+            return Complex.PLUS_I;
+
+        if (s.equals("-i"))
+            return Complex.MINUS_I;
 
         String[] temp;
         double res_real, res_img;
@@ -46,13 +51,17 @@ public class Test extends PApplet {
             }
         }
 
+
+        final String[] img_tmp;
         if (temp[0].contains("i")) {
             real_str = temp[1];
-            img_str = temp[0].split("i")[0];
+            img_tmp = temp[0].split("i");
         } else {
             real_str = temp[0];
-            img_str = temp[1].split("i")[0];
+            img_tmp = temp[1].split("i");
         }
+
+        img_str = img_tmp.length > 0? img_tmp[0]: "";
 
         res_real = Format.isEmpty(real_str)? 0: Double.parseDouble(real_str);
         res_img = Format.isEmpty(img_str)? 0: Double.parseDouble(img_str);
@@ -67,7 +76,9 @@ public class Test extends PApplet {
     public static void main(String[] args) {
 
 //        ComplexFormat cm = new ComplexFormat();
-        println(parseComplex(" -89 +512.891i"));
+//        println(parseComplex(" -89 +512.891i"));
+        println(parseComplex("-2i"));
+//        println(Arrays.toString(" i ".split("i")));
 
 //        final Test app = new Test();
 //        PApplet.runSketch(PApplet.concat(new String[]{app.getClass().getName()}, args), app);

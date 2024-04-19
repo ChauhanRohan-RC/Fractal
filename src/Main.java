@@ -110,9 +110,9 @@ public class Main extends PApplet {
     public static final float TITLE_SIZE = 0.026f;
     public static final Color FG_TITLE = COLOR_ACCENT_HIGHLIGHT;
 
-    public static final boolean SHOW_PAUSED = true;
-    public static final float PAUSED_TEXT_SIZE = 0.026f;
-    public static final Color FG_PAUSED_TEXT = COLOR_ACCENT_HIGHLIGHT;
+    public static final boolean SHOW_RENDERING_STATUS = true;
+    public static final float RENDERING_STATUS_TEXT_SIZE = 0.026f;
+    public static final Color FG_RENDERING_STATUS_TEXT = COLOR_ACCENT_HIGHLIGHT;
 
     public static final Color BG_STATUS = new Color(30, 30, 30);
     public static final Color FG_STATUS = COLOR_ACCENT;
@@ -316,33 +316,36 @@ public class Main extends PApplet {
     public void draw() {
         preDraw();
 
+        boolean frameDrawn = false;
+
         switch (animMode) {
             case PERIODIC -> {
                 if (!mAnimPaused) {
                     mSeed = Complex.polar(0.7885, mAnimAngle);
                     mAnimAngle += mAnimAngleStep;
                     drawFrame();
-                } else if (mFrameInvalidated < 2) {
-                    drawFrame();
-                    mFrameInvalidated++;
+                    frameDrawn = true;
                 }
             }
+
             case BY_MOUSE -> {
                 if (!mAnimPaused) {
                     mSeed = new Complex(map(mouseX, 0, width, xMin, xMax), map(mouseY, 0, height, yMax, yMin));
                     drawFrame();
-                } else if (mFrameInvalidated < 2) {
-                    drawFrame();
-                    mFrameInvalidated++;
+                    frameDrawn = true;
                 }
             }
+
             default -> {
-                if (mFrameInvalidated < 2) {
-                    drawFrame();
-                    mFrameInvalidated++;
-                }
             }
         }
+
+        if (!frameDrawn && mFrameInvalidated < 2) {
+            drawFrame();
+            frameDrawn = true;
+            mFrameInvalidated++;
+        }
+
 
         // Zoom Rect
 
@@ -354,8 +357,6 @@ public class Main extends PApplet {
 //            rect(Math.min(mousePivot1.x, mousePivot2.x), Math.min(mousePivot1.y, mousePivot2.y), Math.max(mousePivot1.x, mousePivot2.x), Math.max(mousePivot1.y, mousePivot2.y));
 //            popStyle();
 //        }
-
-
 
 //        noLoop();
 
@@ -882,24 +883,30 @@ public class Main extends PApplet {
         }
 
         // Paused
-        if (SHOW_PAUSED && animMode.supportsPause && mAnimPaused) {
-            pushStyle();
-            textFont(pdSans, getTextSize(PAUSED_TEXT_SIZE));
+        if (SHOW_RENDERING_STATUS) {
+            String text = "";
+            if (animMode.supportsPause && mAnimPaused) {
+                text = "Paused";
+            }
+            // There can be other cases
 
-            final String text = "Paused";
+            if (Format.notEmpty(text)) {
+                pushStyle();
+                textFont(pdSans, getTextSize(RENDERING_STATUS_TEXT_SIZE));
 
-            float w = textWidth(text) + (h_offset * 2);
-            float h = (textAscent() + textDescent()) + (v_offset * 2);
+                float w = textWidth(text) + (h_offset * 2);
+                float h = (textAscent() + textDescent()) + (v_offset * 2);
 
-            noStroke();
-            fill(BG_STATUS.getRGB());
-            rectMode(CORNER);
-            rect(width - w - h_offset, v_offset, w, h, 10);
+                noStroke();
+                fill(BG_STATUS.getRGB());
+                rectMode(CORNER);
+                rect(width - w - h_offset, v_offset, w, h, 10);
 
-            fill(FG_PAUSED_TEXT.getRGB());
-            textAlign(RIGHT, TOP);
-            text(text, width - (h_offset * 2), v_offset * 2);
-            popStyle();
+                fill(FG_RENDERING_STATUS_TEXT.getRGB());
+                textAlign(RIGHT, TOP);
+                text(text, width - (h_offset * 2), v_offset * 2);
+                popStyle();
+            }
         }
     }
 
@@ -981,7 +988,7 @@ public class Main extends PApplet {
                 }
             } else if (cmd.equals("hud") || cmd.equals("toggle hud")) {
                 app.toggleHud();
-            } else if (cmd.equals("color") || cmd.equals("change color") || cmd.equals("color scheme")) {
+            } else if (cmd.equals("c") || cmd.equals("color") || cmd.equals("change color") || cmd.equals("color scheme")) {
                 app.nextColorScheme();
             } else if (cmd.equals("anim") || cmd.equals("animation") || cmd.equals("change anim") || cmd.equals("sa") ||  cmd.equals("change sa")) {
                 app.nextSeedAnimationMode();
@@ -1092,6 +1099,8 @@ public class Main extends PApplet {
                     System.err.println(R.SHELL_ROOT + "Invalid reset option <" + left + ">");
                     usage_pr.run();
                 }
+            } else {
+                System.err.println(R.SHELL_ROOT + "Unknown command \"%s\"\nType \"help commands\" for available commands...".formatted(cmd));
             }
         }
 
